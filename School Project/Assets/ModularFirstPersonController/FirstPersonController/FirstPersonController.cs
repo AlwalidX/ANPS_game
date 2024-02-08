@@ -70,7 +70,7 @@ public class FirstPersonController : MonoBehaviour
     public float sprintSpeed = 7f;
     public float sprintDuration = 5f;
     public float sprintCooldown = .5f;
-    public float sprintFOV = 80f;
+    public float sprintFOV = 30f;
     public float sprintFOVStepTime = 10f;
 
     // Sprint Bar
