@@ -1,98 +1,128 @@
 using UnityEngine;
 using UnityEngine.AI;
 
-public class EnemyAI : MonoBehaviour
+public class EnemyController : MonoBehaviour
 {
-    // Patrol variables
+    // Patrolling
     public Transform[] patrolPoints;
-    private int currentPatrolPoint = 0;
-    public float patrolSpeed = 2f;
-    public float minDistanceToChangePoint = 0.1f;
+    private int currentPatrolIndex = 0;
 
-    // Chase variables
-    public Transform playerTransform;
+    // Chasing
+    public Transform player;
     public float chaseRange = 10f;
-    public float attackRange = 1.5f;
-    public float chaseSpeed = 4f;
+    public float attackRange = 2f;
 
-    // Attack variables
-    public int attackDamage = 1;
-    public float attackRate = 1f;
-    private float lastAttackTime = 0f;
+    public float distanceToPlayer;
+    // Returning to patrol
+    public float loseSightTime = 5f; 
+    private float loseSightTimer;
+    private Vector3 lastKnownPlayerPosition;
 
-    // NavMeshAgent
+    // Attacking
+    public float attackCooldown = 2f; 
+    private float attackTimer;
+
+    // Components
     private NavMeshAgent agent;
+    private Animator animator; // If you have animations
 
     void Start()
     {
         agent = GetComponent<NavMeshAgent>();
-        if (agent == null)
-        {
-            Debug.LogError("NavMeshAgent not found on " + gameObject.name);
-        }
+        animator = GetComponent<Animator>(); // If you have animations
 
-        UpdateDestination();
+        // Ensure player object is assigned (find it if not)
+        if (player == null)
+        {
+            player = GameObject.FindGameObjectWithTag("Player").transform;
+        }
     }
 
     void Update()
     {
-        if (playerTransform == null)
-        {
-            Debug.LogError("Player Transform not assigned to " + gameObject.name);
-            return;
-        }
+        // Check the distance to the player
+        float distanceToPlayer = Vector3.Distance(transform.position, player.position);
 
-        float distanceToPlayer = Vector3.Distance(transform.position, playerTransform.position);
-
-        // Patrol behavior
-        if (distanceToPlayer > chaseRange)
+        if (distanceToPlayer <= chaseRange)
         {
-            if (!agent.pathPending && agent.remainingDistance < minDistanceToChangePoint)
-            {
-                UpdateDestination();
-            }
-        }
-        // Chase behavior
-        else if (distanceToPlayer <= chaseRange)
-        {
-            agent.SetDestination(playerTransform.position);
             ChasePlayer();
         }
-        // Attack behavior
-        else if (distanceToPlayer <= attackRange)
+        else if (loseSightTimer > 0)
         {
-            AttackPlayer();
+            ReturnToPatrol();
+        }
+        else
+        {
+            Patrol();
         }
     }
 
-    void UpdateDestination()
+    void Patrol()
     {
-        if (patrolPoints.Length == 0)
-        {
-            Debug.LogError("No patrol points assigned to " + gameObject.name);
-            return;
-        }
+        if (patrolPoints.Length == 0) return; // No points to patrol
 
-        agent.SetDestination(patrolPoints[currentPatrolPoint].position);
-        currentPatrolPoint = (currentPatrolPoint + 1) % patrolPoints.Length;
+        // Move to the next patrol point
+        agent.destination = patrolPoints[currentPatrolIndex].position;
+
+        // Check if reached the patrol point
+        if (Vector3.Distance(transform.position, agent.destination) < 1f)
+        {
+            currentPatrolIndex = (currentPatrolIndex + 1) % patrolPoints.Length;
+        }
     }
 
     void ChasePlayer()
     {
-        agent.speed = chaseSpeed;
-        transform.LookAt(playerTransform);
+        agent.destination = player.position;
+        loseSightTimer = 0f; // Player in sight, reset the timer
+
+        // Attack if in range
+        if (distanceToPlayer <= attackRange) 
+        {
+            Attack();
+        }
     }
 
-    void AttackPlayer()
+    void Attack()
     {
-        agent.isStopped = true;
-        transform.LookAt(playerTransform);
-
-        if (Time.time - lastAttackTime >= attackRate)
+        if (attackTimer <= 0f)
         {
-            // Deal damage to player here (e.g., using a trigger collider)
-            Debug.Log(gameObject.name + " attacked player for " + attackDamage + " damage!");
-            lastAttackTime = Time.time;
+            // Play attack animation (if you have one)
+            if (animator != null)
+            {
+                animator.SetTrigger("Attack");                
+            }
+
+            // Apply damage to player (you'll need to get a reference to the player's health script)
+            // player.GetComponent<PlayerHealth>().TakeDamage(damageAmount);
+
+            attackTimer = attackCooldown;
         }
+
+        attackTimer -= Time.deltaTime; 
+    }
+
+    void ReturnToPatrol()
+    {
+        loseSightTimer -= Time.deltaTime;
+
+        if (loseSightTimer <= 0)
+        {
+            // Move back towards last known player position or resume patrol route
+            agent.destination = lastKnownPlayerPosition; 
+
+            // Check if roughly back at last position to resume patrol (adjust tolerance as needed)
+            if (Vector3.Distance(transform.position, lastKnownPlayerPosition) < 2f) 
+            {
+                loseSightTimer = 0f; 
+            }
+        }
+    }
+
+    // Call this if the player gets out of sight during a chase
+    public void PlayerLostSight()
+    {
+        loseSightTimer = loseSightTime;
+        lastKnownPlayerPosition = player.position;
     }
 }
